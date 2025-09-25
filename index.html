@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CogniQuiz AI - The Intelligent Quiz Platform</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body { 
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+        }
+        #bg-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+        }
+        .view { display: none; }
+        .active-view { display: block; }
+        .btn {
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .btn:hover {
+            transform: translateY(-3px) scale(1.05);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+        }
+        .custom-radio input[type="radio"] { display: none; }
+        .custom-radio label { 
+            transition: all 0.2s ease; 
+            border: 2px solid #e5e7eb;
+        }
+        .custom-radio input[type="radio"]:checked + label {
+            background-color: #3b82f6;
+            color: white;
+            border-color: #3b82f6;
+            box-shadow: 0 4px 14px 0 rgb(59 130 246 / 39%);
+            transform: scale(1.02);
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Congratulations Animation */
+        .confetti {
+            position: absolute;
+            width: 10px;
+            height: 20px;
+            background-color: #f00;
+            opacity: 0.7;
+            animation: confetti-fall 3s linear forwards;
+        }
+        @keyframes confetti-fall {
+            0% { transform: translateY(-10vh) rotateZ(0deg); }
+            100% { transform: translateY(100vh) rotateZ(720deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen">
+    <canvas id="bg-canvas"></canvas>
+    <div class="w-full max-w-7xl mx-auto bg-white/80 backdrop-blur-sm rounded-2xl shadow-2xl p-6 md:p-10 text-gray-800 relative m-4 overflow-y-auto" style="max-height: 95vh;">
+        <div id="admin-login-button-container" class="absolute top-6 right-6 md:top-10 md:right-10">
+            <button id="admin-modal-trigger" class="btn text-sm font-semibold bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded-lg shadow-sm">Admin Login</button>
+        </div>
+
+        <!-- Loading View -->
+        <div id="loading-view" class="text-center py-16 view">
+             <p class="mt-6 text-lg font-medium text-gray-600">Loading...</p>
+        </div>
+
+        <!-- Login View -->
+        <div id="login-view" class="view active-view">
+            <div class="text-center mb-10">
+                <h1 class="text-5xl font-extrabold text-gray-800">CogniQuiz AI</h1>
+                <p class="text-gray-500 mt-3 text-lg">The Intelligent Quiz Platform</p>
+            </div>
+            
+            <div class="max-w-md mx-auto">
+                <div id="user-login-form">
+                    <div class="space-y-6">
+                        <div>
+                            <label for="user-id" class="block text-sm font-medium text-gray-700">Your User ID</label>
+                            <input type="text" id="user-id" placeholder="Enter the ID provided by the admin" class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        </div>
+                        <button id="user-login-button" class="btn w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-lg font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">Login as User</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Admin View -->
+        <div id="admin-view" class="view">
+             <div class="flex justify-between items-center mb-8 pb-4 border-b">
+                <h2 class="text-4xl font-bold">Admin Dashboard</h2>
+                <button id="admin-logout-button" class="btn text-sm font-semibold text-white bg-red-500 hover:bg-red-600 px-4 py-2 rounded-lg shadow-sm">Logout</button>
+            </div>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div class="lg:col-span-1 space-y-8">
+                     <div class="bg-gray-50 p-6 rounded-xl shadow-md">
+                        <h3 class="text-xl font-semibold mb-4 border-b pb-3">Quiz Analytics</h3>
+                        <div id="analytics-container" class="space-y-3">
+                            <!-- Analytics data will be injected here -->
+                        </div>
+                    </div>
+                    <div class="bg-gray-50 p-6 rounded-xl shadow-md">
+                        <h3 class="text-xl font-semibold mb-4 border-b pb-3">Quiz Controls</h3>
+                        <div class="space-y-4">
+                            <div>
+                                <label for="timer-minutes" class="block text-sm font-medium text-gray-700">Quiz Timer (minutes)</label>
+                                <input type="number" id="timer-minutes" value="10" min="1" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            </div>
+                            <button id="start-quiz-button" class="btn w-full py-3 px-4 text-lg font-semibold rounded-lg text-white bg-green-600 hover:bg-green-700">Start Quiz</button>
+                            <button id="end-quiz-button" class="btn w-full py-3 px-4 text-lg font-semibold rounded-lg text-white bg-red-600 hover:bg-red-700 mt-2">End Quiz</button>
+                            <p class="text-center text-lg font-bold" id="admin-quiz-status">Quiz Status: Not Started</p>
+                        </div>
+                    </div>
+                    <div class="bg-gray-50 p-6 rounded-xl shadow-md">
+                        <h3 class="text-xl font-semibold mb-4 border-b pb-3">User Management</h3>
+                         <div class="space-y-3 mb-4">
+                            <input type="text" id="new-user-id" placeholder="New User ID" class="block w-full px-3 py-2 border border-gray-300 rounded-lg">
+                            <input type="text" id="new-user-name" placeholder="New User Name" class="block w-full px-3 py-2 border border-gray-300 rounded-lg">
+                            <button id="add-user-button" class="btn w-full py-2 px-4 font-semibold rounded-lg text-white bg-blue-600 hover:bg-blue-700">Add User</button>
+                        </div>
+                        <div id="user-list-container" class="h-48 overflow-y-auto pr-2"></div>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-2 bg-gray-50 p-6 rounded-xl shadow-md">
+                    <h3 class="text-xl font-semibold mb-4 border-b pb-3">Question Management</h3>
+                    <div class="space-y-6">
+                        <div class="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                             <h4 class="text-lg font-medium mb-3 text-blue-800">Generate Questions with AI</h4>
+                             <div class="space-y-3">
+                                <textarea id="ai-prompt-input" placeholder="Enter a topic, e.g., '5 questions about Indian history'" rows="2" class="block w-full px-3 py-2 border border-gray-300 rounded-lg"></textarea>
+                                <button id="generate-ai-questions-button" class="btn w-full py-2 px-4 font-semibold rounded-lg text-white bg-blue-600 hover:bg-blue-700 flex items-center justify-center">
+                                    <span id="ai-button-text">Generate Questions</span>
+                                    <div id="ai-loader" class="loader ml-3 hidden"></div>
+                                </button>
+                             </div>
+                        </div>
+                        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                            <div>
+                                <h4 id="question-form-title" class="text-lg font-medium mb-3">Add Question Manually</h4>
+                                <form id="question-form" class="space-y-3">
+                                    <input type="hidden" id="question-id-input">
+                                    <textarea id="question-text-input" placeholder="Question Text" rows="2" class="block w-full px-3 py-2 border border-gray-300 rounded-lg"></textarea>
+                                    <input type="text" id="option1-input" placeholder="Option 1" class="block w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                    <input type="text" id="option2-input" placeholder="Option 2" class="block w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                    <input type="text" id="option3-input" placeholder="Option 3" class="block w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                    <input type="text" id="option4-input" placeholder="Option 4" class="block w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                    <select id="correct-answer-select" class="block w-full px-3 py-2 border border-gray-300 rounded-lg bg-white">
+                                        <option value="">Select Correct Answer</option>
+                                        <option value="1">Option 1</option>
+                                        <option value="2">Option 2</option>
+                                        <option value="3">Option 3</option>
+                                        <option value="4">Option 4</option>
+                                    </select>
+                                    <div class="flex space-x-2 pt-2">
+                                        <button id="save-question-button" type="button" class="btn w-full py-2 px-4 font-semibold rounded-lg text-white bg-green-600 hover:bg-green-700">Save Question</button>
+                                        <button id="clear-question-form-button" type="button" class="btn w-full py-2 px-4 font-semibold rounded-lg bg-gray-300 hover:bg-gray-400">Clear</button>
+                                    </div>
+                                </form>
+                            </div>
+                            <div>
+                                <h4 class="text-lg font-medium mb-3">Question List</h4>
+                                <div id="question-list-container" class="h-[28.5rem] overflow-y-auto pr-2"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-8 bg-gray-50 p-6 rounded-xl shadow-md">
+                <h3 class="text-xl font-semibold mb-4 border-b pb-3">Submissions & Results</h3>
+                <div id="submission-list-container" class="h-64 overflow-y-auto mb-4 pr-2"></div>
+                <button id="publish-results-button" class="btn w-full py-3 px-4 text-lg font-semibold rounded-lg text-white bg-purple-600 hover:bg-purple-700">Publish All Results</button>
+            </div>
+        </div>
+
+        <!-- User Views -->
+        <div id="user-waiting-view" class="view text-center py-16">
+            <h2 class="text-4xl font-bold">Welcome, <span id="welcome-user-name"></span>!</h2>
+            <p class="text-gray-600 mt-4 text-lg">The quiz will begin shortly. Please wait.</p>
+            <div class="mt-8 animate-pulse text-blue-500 font-semibold text-xl">Waiting...</div>
+        </div>
+        <div id="user-quiz-view" class="view">
+            <div class="flex justify-between items-center mb-6 p-4 bg-blue-600 text-white rounded-xl shadow-lg">
+                <h2 class="text-2xl font-bold">Quiz in Progress</h2>
+                <div id="quiz-timer" class="text-2xl font-bold bg-white text-blue-600 px-4 py-2 rounded-lg">00:00</div>
+            </div>
+            <div id="question-container" class="bg-gray-50 p-6 rounded-xl shadow-inner"></div>
+            <div class="flex justify-between mt-6">
+                <button id="prev-question-button" class="btn py-3 px-8 rounded-lg font-semibold bg-gray-300 hover:bg-gray-400">Previous</button>
+                <button id="next-question-button" class="btn py-3 px-8 rounded-lg font-semibold text-white bg-blue-600 hover:bg-blue-700">Next</button>
+                <button id="submit-quiz-button" class="btn py-3 px-8 rounded-lg font-semibold text-white bg-green-600 hover:bg-green-700 hidden">Submit</button>
+            </div>
+        </div>
+         <div id="congrats-view" class="view text-center py-16 relative">
+            <h2 class="text-5xl font-extrabold text-green-500">Congratulations!</h2>
+            <p class="text-gray-600 mt-4 text-xl">You've completed the quiz.</p>
+             <p class="text-gray-500 mt-2">Calculating your score and waiting for results...</p>
+        </div>
+        <div id="user-waiting-for-results-view" class="view text-center py-16">
+            <h2 class="text-4xl font-bold">Submission Complete!</h2>
+            <p class="text-gray-600 mt-4 text-lg">Thank you! Please wait for the results.</p>
+            <div class="mt-8 animate-pulse text-green-500 font-semibold text-xl">Waiting for results...</div>
+        </div>
+        <div id="user-result-view" class="view text-center py-16">
+            <h2 class="text-5xl font-extrabold text-gray-800">Quiz Results!</h2>
+            <p class="text-gray-600 mt-4 text-xl">Thank you for participating.</p>
+            <div class="mt-8 bg-blue-100 p-8 rounded-2xl inline-block">
+                <p class="text-lg font-medium text-blue-800">Your Score:</p>
+                <p id="user-score" class="text-7xl font-extrabold text-blue-600">0 / 0</p>
+            </div>
+            <p class="mt-8 text-gray-500">You have been logged out.</p>
+        </div>
+
+        <footer class="text-center mt-10 pt-6 border-t border-gray-200">
+            <p class="text-sm font-medium text-gray-600">Developed by Amol Patil</p>
+            <p class="text-xs text-gray-400 mt-1">Tech-Hub Member • Google Student Ambassador</p>
+        </footer>
+    </div>
+
+    <!-- Modals -->
+    <div id="custom-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 hidden p-4">
+        <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-md animate-fade-in">
+            <h3 id="modal-title" class="text-xl font-bold mb-4"></h3>
+            <p id="modal-message" class="text-gray-600 mb-6"></p>
+            <div id="modal-actions" class="flex justify-end space-x-4">
+                <button id="modal-cancel-button" class="btn px-5 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 font-semibold">Cancel</button>
+                <button id="modal-confirm-button" class="btn px-5 py-2 rounded-lg text-white bg-blue-600 hover:bg-blue-700 font-semibold">Confirm</button>
+            </div>
+        </div>
+    </div>
+    <div id="admin-login-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 hidden p-4">
+        <div class="bg-white rounded-xl shadow-xl p-8 w-full max-w-sm relative animate-fade-in">
+            <button id="close-admin-modal" class="absolute top-3 right-3 text-2xl text-gray-400 hover:text-gray-600">&times;</button>
+            <h3 class="text-2xl font-bold mb-6 text-center">Admin Login</h3>
+            <div id="admin-login-form">
+                <div class="space-y-6">
+                    <div>
+                        <label for="admin-password" class="block text-sm font-medium text-gray-700">Admin Password</label>
+                        <input type="password" id="admin-password" placeholder="Enter admin password" class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    </div>
+                    <button id="admin-login-button" class="btn w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-lg font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">Login as Admin</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // --- CONFIGURATION ---
+        const GEMINI_API_KEY = "AIzaSyCcCkZC5NNpgjsbcVg5c4kYkIPX4iG7igw";
+        const ADMIN_PASSWORD = "admin";
+
+        // --- LOCAL DATABASE SIMULATION ---
+        const localDB = {
+            quizConfig: { quizActive: false, timerDuration: 600, resultsPublished: false },
+            users: {},
+            questions: [
+                { id: Date.now() + 1, text: "What is the capital of India?", options: ["Mumbai", "Kolkata", "New Delhi", "Chennai"], correctAnswer: "New Delhi" },
+            ],
+            analytics: {
+                quizStarts: 0,
+                submissions: 0,
+                aiGenerations: 0,
+            }
+        };
+
+        // --- GLOBAL STATE ---
+        let currentUserId = null;
+        let quizTimerInterval = null;
+        let modalConfirmResolver = null;
+
+        // --- UI ELEMENTS ---
+        const views = {
+            loading: document.getElementById('loading-view'),
+            login: document.getElementById('login-view'),
+            admin: document.getElementById('admin-view'),
+            userWaiting: document.getElementById('user-waiting-view'),
+            userQuiz: document.getElementById('user-quiz-view'),
+            congrats: document.getElementById('congrats-view'),
+            userWaitingForResults: document.getElementById('user-waiting-for-results-view'),
+            userResult: document.getElementById('user-result-view'),
+        };
+        const questionForm = document.getElementById('question-form');
+        const adminModal = document.getElementById('admin-login-modal');
+        const adminLoginButtonContainer = document.getElementById('admin-login-button-container');
+
+        // --- HELPERS ---
+        const switchView = (viewName) => {
+            Object.values(views).forEach(v => v.classList.remove('active-view'));
+            if (views[viewName]) views[viewName].classList.add('active-view');
+            adminLoginButtonContainer.style.display = (viewName === 'login' || viewName === 'userWaiting') ? 'block' : 'none';
+        };
+
+        function showModal(title, message, showCancel = false) {
+            document.getElementById('modal-title').textContent = title;
+            document.getElementById('modal-message').innerHTML = message;
+            document.getElementById('modal-cancel-button').style.display = showCancel ? 'block' : 'none';
+            document.getElementById('modal-confirm-button').textContent = showCancel ? 'Confirm' : 'OK';
+            document.getElementById('custom-modal').classList.remove('hidden');
+            return new Promise((resolve) => { modalConfirmResolver = resolve; });
+        }
+        document.getElementById('modal-confirm-button').addEventListener('click', () => {
+            document.getElementById('custom-modal').classList.add('hidden');
+            if (modalConfirmResolver) modalConfirmResolver(true);
+        });
+        document.getElementById('modal-cancel-button').addEventListener('click', () => {
+            document.getElementById('custom-modal').classList.add('hidden');
+            if (modalConfirmResolver) modalConfirmResolver(false);
+        });
+        const showAlert = (message) => showModal("Alert", message, false);
+        const showConfirm = (message) => showModal("Confirmation", message, true);
+        
+        // --- INITIALIZATION ---
+        window.onload = () => {
+             if (GEMINI_API_KEY === 'YOUR_GEMINI_API_KEY') {
+                switchView('loading');
+                const loadingView = document.getElementById('loading-view');
+                loadingView.innerHTML = `
+                    <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-6 rounded-lg text-left max-w-2xl mx-auto" role="alert">
+                        <p class="font-bold text-xl">Action Required: Configuration Error</p>
+                        <p class="mt-2">Your Google Gemini API Key is missing.</p>
+                        <p class="mt-4 font-semibold">Follow these steps to fix this:</p>
+                        <ol class="list-decimal list-inside mt-2 space-y-1">
+                            <li>Go to <a href="https://makersuite.google.com/" target="_blank" class="text-blue-600 underline font-medium">Google AI Studio</a>.</li>
+                            <li>Click on <strong>Get API key</strong> to create a new key.</li>
+                            <li>Copy that key and paste it into the script section of this HTML file.</li>
+                        </ol>
+                    </div>`;
+                return;
+            }
+            switchView('login');
+        };
+
+        // --- EVENT DISPATCHER ---
+        function dispatchDbUpdate() {
+            document.dispatchEvent(new CustomEvent('dbUpdate'));
+        }
+
+        // --- LOGIN/LOGOUT ---
+        document.getElementById('admin-modal-trigger').addEventListener('click', () => adminModal.classList.remove('hidden'));
+        document.getElementById('close-admin-modal').addEventListener('click', () => adminModal.classList.add('hidden'));
+
+        document.getElementById('user-login-button').addEventListener('click', () => {
+            const userId = document.getElementById('user-id').value.trim();
+            if (!userId) return showAlert("Please enter a User ID.");
+            const user = localDB.users[userId];
+            if (user) {
+                if (user.isLoggedIn) return showAlert("This user is already logged in.");
+                user.isLoggedIn = true;
+                currentUserId = userId;
+                document.getElementById('welcome-user-name').textContent = user.name;
+                listenForQuizStart();
+                dispatchDbUpdate();
+            } else {
+                showAlert("Invalid User ID. Please check with the admin.");
+            }
+        });
+
+        document.getElementById('admin-login-button').addEventListener('click', () => {
+            if (document.getElementById('admin-password').value === ADMIN_PASSWORD) {
+                adminModal.classList.add('hidden');
+                loadAdminDashboard();
+            } else {
+                showAlert("Incorrect admin password.");
+            }
+        });
+
+        // --- ADMIN DASHBOARD ---
+        function loadAdminDashboard() {
+            switchView('admin');
+            refreshAdminDashboard();
+            document.addEventListener('dbUpdate', refreshAdminDashboard);
+        }
+        
+        function refreshAdminDashboard() {
+            const config = localDB.quizConfig;
+            const statusEl = document.getElementById('admin-quiz-status');
+            statusEl.textContent = config.quizActive ? `Quiz Active!` : "Quiz Status: Not Started";
+            statusEl.className = `text-center text-lg font-bold ${config.quizActive ? 'text-green-600' : 'text-blue-600'}`;
+
+            const users = Object.entries(localDB.users);
+            const totalQuestions = localDB.questions.length;
+            
+            // --- Update Analytics ---
+            const analyticsContainer = document.getElementById('analytics-container');
+            const onlineUsers = users.filter(([id, user]) => user.isLoggedIn).length;
+            const submissions = users.filter(([id, user]) => user.status === 'submitted').length;
+            const totalScores = users.reduce((acc, [id, user]) => acc + (user.score || 0), 0);
+            const avgScore = submissions > 0 ? (totalScores / submissions).toFixed(1) : 0;
+            analyticsContainer.innerHTML = `
+                <div class="flex justify-between items-center text-sm">
+                    <span class="font-medium text-gray-600">Online Users:</span>
+                    <span class="font-bold text-green-600">${onlineUsers} / ${users.length}</span>
+                </div>
+                <div class="flex justify-between items-center text-sm">
+                    <span class="font-medium text-gray-600">Submissions:</span>
+                    <span class="font-bold text-blue-600">${submissions} / ${users.length}</span>
+                </div>
+                 <div class="flex justify-between items-center text-sm">
+                    <span class="font-medium text-gray-600">Average Score:</span>
+                    <span class="font-bold text-purple-600">${avgScore} / ${totalQuestions}</span>
+                </div>
+                 <div class="flex justify-between items-center text-sm">
+                    <span class="font-medium text-gray-600">AI Questions Generated:</span>
+                    <span class="font-bold text-indigo-600">${localDB.analytics.aiGenerations}</span>
+                </div>
+            `;
+
+
+            const userListContainer = document.getElementById('user-list-container');
+            const submissionListContainer = document.getElementById('submission-list-container');
+            userListContainer.innerHTML = '';
+            submissionListContainer.innerHTML = '';
+
+            if (users.length === 0) {
+                userListContainer.innerHTML = '<p class="text-gray-500">No users added yet.</p>';
+            } else {
+                users.forEach(([id, user]) => {
+                    const userDiv = document.createElement('div');
+                    userDiv.className = 'flex justify-between items-center p-3 bg-white rounded-lg shadow-sm mb-2';
+                    userDiv.innerHTML = `<div><p class="font-semibold">${user.name} <span class="text-sm text-gray-500">(${id})</span></p><p class="text-xs ${user.isLoggedIn ? 'text-green-500' : 'text-gray-400'} font-semibold">${user.isLoggedIn ? 'Online' : 'Offline'}</p></div><button class="delete-user-button text-red-500 hover:text-red-700 text-xs font-semibold" data-id="${id}">REMOVE</button>`;
+                    userListContainer.appendChild(userDiv);
+                });
+            }
+
+            if (config.resultsPublished) {
+                submissionListContainer.innerHTML = '<h4 class="font-semibold mb-2 text-gray-700">Final Results</h4>';
+                 if (users.length === 0) {
+                    submissionListContainer.innerHTML += '<p class="text-gray-500">No users participated.</p>';
+                } else {
+                    users.sort((a, b) => b[1].score - a[1].score).forEach(([id, user]) => {
+                        const resultDiv = document.createElement('div');
+                        resultDiv.className = 'flex justify-between items-center p-3 bg-white rounded-lg shadow-sm mb-2';
+                        resultDiv.innerHTML = `<p class="font-semibold">${user.name} (${id})</p><p class="font-bold text-blue-600">Final Score: ${user.score} / ${totalQuestions}</p>`;
+                        submissionListContainer.appendChild(resultDiv);
+                    });
+                }
+            } else {
+                let submissionsFound = false;
+                users.forEach(([id, user]) => {
+                    if (user.status === 'submitted') {
+                        submissionsFound = true;
+                        const submissionDiv = document.createElement('div');
+                        submissionDiv.className = 'flex justify-between items-center p-3 bg-white rounded-lg shadow-sm mb-2';
+                        submissionDiv.innerHTML = `<p class="font-semibold">${user.name} (${id})</p><p class="font-bold text-blue-600">Score: ${user.score} / ${totalQuestions}</p>`;
+                        submissionListContainer.appendChild(submissionDiv);
+                    }
+                });
+                if (!submissionsFound) submissionListContainer.innerHTML = '<p class="text-gray-500">No submissions yet.</p>';
+            }
+            
+            const allQuestions = localDB.questions;
+            const questionContainer = document.getElementById('question-list-container');
+            questionContainer.innerHTML = '';
+             if(!allQuestions || allQuestions.length === 0) {
+                questionContainer.innerHTML = '<p class="text-gray-500">No questions added yet.</p>';
+            } else {
+                allQuestions.forEach(q => {
+                    const div = document.createElement('div');
+                    div.className = 'p-3 bg-white rounded-lg shadow-sm mb-2';
+                    div.innerHTML = `<p class="font-semibold">${q.text}</p><p class="text-xs text-green-600 mt-1">Correct Answer: ${q.correctAnswer}</p><div class="mt-2 text-right space-x-3"><button class="edit-question-button text-blue-500 hover:underline text-xs font-bold" data-id="${q.id}">EDIT</button><button class="delete-question-button text-red-500 hover:underline text-xs font-bold" data-id="${q.id}">DELETE</button></div>`;
+                    questionContainer.appendChild(div);
+                });
+            }
+        }
+
+        // --- ADMIN ACTIONS ---
+        document.getElementById('add-user-button').addEventListener('click', () => {
+            const newUserId = document.getElementById('new-user-id').value.trim();
+            const newUserName = document.getElementById('new-user-name').value.trim();
+            if (!newUserId || !newUserName) return showAlert("Please provide both User ID and Name.");
+            if (localDB.users[newUserId]) return showAlert("This User ID already exists.");
+            localDB.users[newUserId] = { name: newUserName, isLoggedIn: false, answers: {}, score: 0, status: 'waiting' };
+            dispatchDbUpdate();
+            document.getElementById('new-user-id').value = '';
+            document.getElementById('new-user-name').value = '';
+        });
+
+        document.getElementById('user-list-container').addEventListener('click', async (e) => {
+            if (e.target.classList.contains('delete-user-button')) {
+                const userId = e.target.dataset.id;
+                if (await showConfirm(`Are you sure you want to remove user ${userId}?`)) {
+                    delete localDB.users[userId];
+                    dispatchDbUpdate();
+                }
+            }
+        });
+
+        document.getElementById('start-quiz-button').addEventListener('click', () => {
+            const minutes = document.getElementById('timer-minutes').value;
+            const durationInSeconds = parseInt(minutes) * 60;
+            if (durationInSeconds <= 0) return showAlert("Please set a valid timer duration.");
+            Object.values(localDB.users).forEach(u => {
+                u.score = 0; u.answers = {}; u.status = 'waiting';
+            });
+            localDB.quizConfig.quizActive = true;
+            localDB.quizConfig.timerDuration = durationInSeconds;
+            localDB.quizConfig.resultsPublished = false;
+            localDB.analytics.quizStarts++;
+            dispatchDbUpdate();
+        });
+
+        document.getElementById('end-quiz-button').addEventListener('click', async () => {
+            if (await showConfirm("Are you sure you want to end the quiz immediately?")) {
+                localDB.quizConfig.quizActive = false;
+                dispatchDbUpdate();
+            }
+        });
+        
+        document.getElementById('publish-results-button').addEventListener('click', async () => {
+            if (await showConfirm("Are you sure you want to publish the results for all users?")) {
+                localDB.quizConfig.resultsPublished = true;
+                dispatchDbUpdate();
+                showAlert("Results have been published!");
+            }
+        });
+        
+        const clearQuestionForm = () => {
+            questionForm.reset();
+            document.getElementById('question-id-input').value = '';
+            document.getElementById('question-form-title').textContent = 'Add Question Manually';
+            document.getElementById('save-question-button').textContent = 'Save Question';
+        };
+        document.getElementById('clear-question-form-button').addEventListener('click', clearQuestionForm);
+
+        document.getElementById('save-question-button').addEventListener('click', () => {
+            const questionId = document.getElementById('question-id-input').value;
+            const text = document.getElementById('question-text-input').value.trim();
+            const options = [
+                document.getElementById('option1-input').value.trim(),
+                document.getElementById('option2-input').value.trim(),
+                document.getElementById('option3-input').value.trim(),
+                document.getElementById('option4-input').value.trim(),
+            ];
+            const correctAnswerIndex = document.getElementById('correct-answer-select').value;
+            if (!text || options.some(opt => !opt) || !correctAnswerIndex) return showAlert('Please fill out all fields.');
+            
+            const questionData = { text, options, correctAnswer: options[parseInt(correctAnswerIndex) - 1] };
+
+            if (questionId) {
+                const index = localDB.questions.findIndex(q => q.id == questionId);
+                localDB.questions[index] = { ...localDB.questions[index], ...questionData };
+            } else {
+                localDB.questions.push({ id: Date.now(), ...questionData });
+            }
+            dispatchDbUpdate();
+            clearQuestionForm();
+        });
+
+        document.getElementById('question-list-container').addEventListener('click', (e) => {
+            const questionId = e.target.dataset.id;
+            if (!questionId) return;
+
+            if (e.target.classList.contains('delete-question-button')) {
+                showConfirm('Are you sure you want to delete this question?').then(confirmed => {
+                    if (confirmed) {
+                        localDB.questions = localDB.questions.filter(q => q.id != questionId);
+                        dispatchDbUpdate();
+                    }
+                });
+            } else if (e.target.classList.contains('edit-question-button')) {
+                const data = localDB.questions.find(q => q.id == questionId);
+                if(data) {
+                    document.getElementById('question-id-input').value = data.id;
+                    document.getElementById('question-text-input').value = data.text;
+                    ['option1-input', 'option2-input', 'option3-input', 'option4-input'].forEach((id, i) => document.getElementById(id).value = data.options[i]);
+                    document.getElementById('correct-answer-select').value = data.options.indexOf(data.correctAnswer) + 1;
+                    document.getElementById('question-form-title').textContent = 'Edit Question';
+                    document.getElementById('save-question-button').textContent = 'Update Question';
+                    questionForm.scrollIntoView({ behavior: 'smooth' });
+                }
+            }
+        });
+        
+        document.getElementById('admin-logout-button').addEventListener('click', () => {
+            document.removeEventListener('dbUpdate', refreshAdminDashboard);
+            switchView('login');
+        });
+
+        // --- AI QUESTION GENERATION ---
+        document.getElementById('generate-ai-questions-button').addEventListener('click', async () => {
+            const prompt = document.getElementById('ai-prompt-input').value.trim();
+            if (!prompt) return showAlert("Please enter a topic for the AI.");
+
+            const button = document.getElementById('generate-ai-questions-button');
+            const buttonText = document.getElementById('ai-button-text');
+            const loader = document.getElementById('ai-loader');
+
+            buttonText.textContent = "Generating...";
+            loader.classList.remove('hidden');
+            button.disabled = true;
+
+            try {
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${GEMINI_API_KEY}`;
+                
+                const payload = {
+                  contents: [{ parts: [{ text: `Generate multiple choice questions based on the topic: "${prompt}". Ensure each question has exactly 4 options.` }] }],
+                  generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                      type: "ARRAY",
+                      items: {
+                        type: "OBJECT",
+                        properties: {
+                          "text": { "type": "STRING" },
+                          "options": { "type": "ARRAY", "items": { "type": "STRING" } },
+                          "correctAnswer": { "type": "STRING" }
+                        },
+                        required: ["text", "options", "correctAnswer"]
+                      }
+                    }
+                  }
+                };
+                
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error.message || `API request failed with status ${response.status}`);
+                }
+                
+                const result = await response.json();
+                const generatedText = result.candidates[0].content.parts[0].text;
+                const newQuestions = JSON.parse(generatedText);
+
+                localDB.analytics.aiGenerations += newQuestions.length;
+                newQuestions.forEach(q => {
+                    if (q.text && q.options && q.options.length === 4 && q.correctAnswer) {
+                         localDB.questions.push({ id: Date.now() + Math.random(), ...q });
+                    }
+                });
+                dispatchDbUpdate();
+                document.getElementById('ai-prompt-input').value = '';
+
+            } catch (error) {
+                console.error("AI Generation Error:", error);
+                showAlert(`Could not generate questions with AI. Error: ${error.message}`);
+            } finally {
+                buttonText.textContent = "Generate Questions";
+                loader.classList.add('hidden');
+                button.disabled = false;
+            }
+        });
+
+        // --- USER QUIZ LOGIC ---
+        function listenForQuizStart() {
+            switchView('userWaiting');
+            handleQuizStateChange(); 
+            document.addEventListener('dbUpdate', handleQuizStateChange);
+        }
+        
+        function handleQuizStateChange(){
+            const config = localDB.quizConfig;
+            const isActiveView = ['userQuiz', 'userWaiting'].some(v => views[v].classList.contains('active-view'));
+
+            if (config.quizActive) {
+                if (isActiveView && !quizTimerInterval) startQuiz(config.timerDuration);
+            } else if(config.resultsPublished) {
+                const userData = localDB.users[currentUserId];
+                if (userData && userData.status === 'submitted') showResults();
+            } else if (isActiveView && views.userQuiz.classList.contains('active-view')) {
+                handleQuizEnd(false); 
+            }
+        }
+
+        function startQuiz(duration) {
+            let quizQuestions = localDB.questions;
+            if (quizQuestions.length === 0) {
+                showAlert("No questions found.");
+                return logoutUser();
+            }
+            switchView('userQuiz');
+            localDB.users[currentUserId].answers = {};
+            renderQuestion(0);
+            startTimer(duration);
+        }
+
+        function renderQuestion(index) {
+            let quizQuestions = localDB.questions;
+            const question = quizQuestions[index];
+            let userAnswers = localDB.users[currentUserId].answers;
+            const container = document.getElementById('question-container');
+            let optionsHtml = question.options.map((opt, i) => `<div class="custom-radio"><input type="radio" id="option${i}" name="quiz-option" value="${opt}" ${userAnswers[question.id] === opt ? 'checked' : ''}><label for="option${i}" class="block w-full text-left p-4 my-2 border-2 rounded-lg cursor-pointer">${opt}</label></div>`).join('');
+            container.innerHTML = `<p class="text-lg font-medium mb-1 text-gray-600">Question ${index + 1} of ${quizQuestions.length}</p><h3 class="text-2xl font-bold mb-6">${question.text}</h3>${optionsHtml}`;
+            
+            container.querySelectorAll('input[name="quiz-option"]').forEach(radio => radio.addEventListener('change', (e) => userAnswers[question.id] = e.target.value));
+
+            const [nextBtn, prevBtn, submitBtn] = [document.getElementById('next-question-button'), document.getElementById('prev-question-button'), document.getElementById('submit-quiz-button')];
+            prevBtn.style.visibility = index === 0 ? 'hidden' : 'visible';
+            nextBtn.style.display = index === quizQuestions.length - 1 ? 'none' : 'block';
+            submitBtn.style.display = index === quizQuestions.length - 1 ? 'block' : 'none';
+            nextBtn.onclick = () => renderQuestion(index + 1);
+            prevBtn.onclick = () => renderQuestion(index - 1);
+        }
+        
+        document.getElementById('submit-quiz-button').addEventListener('click', () => handleQuizEnd(true));
+
+        function startTimer(duration) {
+            let timer = duration;
+            const timerEl = document.getElementById('quiz-timer');
+            const updateTimerDisplay = () => timerEl.textContent = `${Math.floor(timer / 60).toString().padStart(2, '0')}:${(timer % 60).toString().padStart(2, '0')}`;
+            updateTimerDisplay();
+            if(quizTimerInterval) clearInterval(quizTimerInterval);
+            quizTimerInterval = setInterval(() => {
+                timer--;
+                updateTimerDisplay();
+                if (timer <= 0) handleQuizEnd(true);
+            }, 1000);
+        }
+
+        function handleQuizEnd(isSubmission) {
+            if (quizTimerInterval) clearInterval(quizTimerInterval);
+            quizTimerInterval = null;
+
+            const user = localDB.users[currentUserId];
+            if(isSubmission) {
+                let quizQuestions = localDB.questions;
+                let score = quizQuestions.reduce((acc, q) => acc + (user.answers[q.id] === q.correctAnswer ? 1 : 0), 0);
+                user.score = score;
+                user.status = 'submitted';
+                localDB.analytics.submissions++;
+                dispatchDbUpdate();
+                
+                // Show congrats animation
+                switchView('congrats');
+                triggerConfetti();
+                setTimeout(() => {
+                    switchView('userWaitingForResults');
+                }, 3000);
+
+            } else {
+                showAlert("The quiz has been ended by the administrator.");
+                logoutUser();
+            }
+        }
+
+        function showResults() {
+             const userData = localDB.users[currentUserId];
+             if(userData) {
+                document.getElementById('user-score').textContent = `${userData.score} / ${localDB.questions.length}`;
+                switchView('userResult');
+                logoutUser();
+             }
+        }
+        
+        function logoutUser() {
+            document.removeEventListener('dbUpdate', handleQuizStateChange);
+            if (currentUserId) {
+                localDB.users[currentUserId].isLoggedIn = false;
+                dispatchDbUpdate();
+                currentUserId = null;
+            }
+            if (!views.userResult.classList.contains('active-view')) {
+                 switchView('login');
+            }
+        }
+
+        // --- 3D Background ---
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('bg-canvas'), alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+
+        const geometry = new THREE.SphereGeometry(0.5, 16, 16);
+        const particles = [];
+        for (let i = 0; i < 200; i++) {
+            const material = new THREE.MeshBasicMaterial({ color: Math.random() * 0xffffff });
+            const sphere = new THREE.Mesh(geometry, material);
+            sphere.position.x = (Math.random() - 0.5) * 20;
+            sphere.position.y = (Math.random() - 0.5) * 20;
+            sphere.position.z = (Math.random() - 0.5) * 20;
+            particles.push(sphere);
+            scene.add(sphere);
+        }
+        camera.position.z = 5;
+
+        function animate() {
+            requestAnimationFrame(animate);
+            particles.forEach(p => {
+                p.position.y -= 0.01;
+                if(p.position.y < -10) p.position.y = 10;
+            });
+            renderer.render(scene, camera);
+        }
+        animate();
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        
+        // --- Confetti Animation ---
+        function triggerConfetti() {
+            const congratsView = document.getElementById('congrats-view');
+            for (let i = 0; i < 100; i++) {
+                const confetti = document.createElement('div');
+                confetti.className = 'confetti';
+                confetti.style.left = `${Math.random() * 100}vw`;
+                confetti.style.animationDelay = `${Math.random() * 2}s`;
+                confetti.style.backgroundColor = `hsl(${Math.random() * 360}, 100%, 50%)`;
+                congratsView.appendChild(confetti);
+                setTimeout(() => confetti.remove(), 3000);
+            }
+        }
+
+    </script>
+</body>
+</html>
+
